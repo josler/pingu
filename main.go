@@ -1,31 +1,59 @@
 package main
 
 import (
+	"flag"
 	"fmt"
+	"io"
+	"log"
+	"os"
 
 	"github.com/josler/pingu/core"
 	"github.com/josler/pingu/processor"
+	"github.com/josler/pingu/tailer"
 )
 
-func main() {
-	rule := processor.NewAndRule(
-		&processor.NameMatchRule{MatchName: "flarv"},
-		&processor.NotFieldMatchRule{FieldName: "bar", Value: "x"},
-	)
-	eventChan := make(chan *core.Event)
+var filepathVar string
+var limitVar int
 
-	filter := processor.NewFilter(rule, eventChan)
+func main() {
+	flag.Parse()
+	file, _ := os.Open("resources/pingu-config.json")
+	c, err := core.ParseConfig(file)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	var reader io.Reader
+	if filepathVar != "" {
+		fmt.Printf("Reading: %s\n\n", filepathVar)
+		file, err := os.Open(filepathVar)
+		defer file.Close()
+		if err != nil {
+			log.Fatal(err)
+		}
+		reader = file
+	} else {
+		reader = os.Stdin
+	}
+
+	p := tailer.Parser{}
+	p.Parse(reader)
+
+	rule := processor.ParseRules(c.Rules())
+	f := processor.ParseCalculation(c.Calculation())
+	filter := processor.NewFilter(rule, p.Out())
 	grouping := processor.NewGrouping(
-		"foo",
-		func() processor.Calculation { return processor.NewMeanCalculation("baz") },
+		c.GroupBy(),
+		f,
 		filter.Out(),
 	)
 
-	eventChan <- &core.Event{Name: "flarv", Data: map[string]interface{}{"foo": "a", "bar": "x", "baz": 1}}
-	eventChan <- &core.Event{Name: "nopey", Data: map[string]interface{}{"foo": "b", "bar": "x"}}
-	eventChan <- &core.Event{Name: "flarv", Data: map[string]interface{}{"foo": "a", "baz": 4}}
-	eventChan <- &core.Event{Name: "flarv", Data: map[string]interface{}{"foo": "a", "baz": 7}}
-	eventChan <- &core.Event{Name: "flarv", Data: map[string]interface{}{"foo": "b", "baz": 2}}
+	grouping.Start()
+	fmt.Println(grouping.Report(limitVar))
+}
 
-	fmt.Println(grouping)
+func init() {
+	flag.StringVar(&filepathVar, "f", "", "filepath to parse")
+	flag.IntVar(&limitVar, "l", -1, "number of items to limit report to")
 }

@@ -3,14 +3,42 @@ package processor
 import "github.com/josler/pingu/core"
 
 type Rule interface {
-	Name() string
+	Type() string
 	Match(e *core.Event) bool
+}
+
+func ParseRules(jsonRule *core.JsonRule) Rule {
+	switch jsonRule.Type {
+	case "and":
+		inner := []Rule{}
+		for _, rule := range jsonRule.Rules {
+			inner = append(inner, ParseRules(rule))
+		}
+		return NewAndRule(inner...)
+	case "or":
+		inner := []Rule{}
+		for _, rule := range jsonRule.Rules {
+			inner = append(inner, ParseRules(rule))
+		}
+		return NewOrRule(inner...)
+	case "all_match":
+		return &AllMatchRule{}
+	case "field_match":
+		return &FieldMatchRule{Name: jsonRule.Name, Value: jsonRule.Value}
+	case "not_field_match":
+		return &NotFieldMatchRule{Name: jsonRule.Name, Value: jsonRule.Value}
+	case "field_present":
+		return &FieldPresentRule{Name: jsonRule.Name}
+	case "not_field_present":
+		return &NotFieldPresentRule{Name: jsonRule.Name}
+	}
+	return nil
 }
 
 func NewAndRule(rules ...Rule) *AndRule {
 	and := AndRule{rules: map[string]Rule{}}
 	for _, rule := range rules {
-		and.rules[rule.Name()] = rule
+		and.rules[rule.Type()] = rule
 	}
 	return &and
 }
@@ -19,7 +47,7 @@ type AndRule struct {
 	rules map[string]Rule
 }
 
-func (and *AndRule) Name() string {
+func (and *AndRule) Type() string {
 	return "and"
 }
 
@@ -35,7 +63,7 @@ func (and *AndRule) Match(event *core.Event) bool {
 func NewOrRule(rules ...Rule) *OrRule {
 	or := OrRule{rules: map[string]Rule{}}
 	for _, rule := range rules {
-		or.rules[rule.Name()] = rule
+		or.rules[rule.Type()] = rule
 	}
 	return &or
 }
@@ -44,7 +72,7 @@ type OrRule struct {
 	rules map[string]Rule
 }
 
-func (or *OrRule) Name() string {
+func (or *OrRule) Type() string {
 	return "or"
 }
 
@@ -59,7 +87,7 @@ func (or *OrRule) Match(event *core.Event) bool {
 
 type AllMatchRule struct{}
 
-func (r *AllMatchRule) Name() string {
+func (r *AllMatchRule) Type() string {
 	return "all_match"
 }
 
@@ -67,29 +95,17 @@ func (r *AllMatchRule) Match(event *core.Event) bool {
 	return true
 }
 
-type NameMatchRule struct {
-	MatchName string
-}
-
-func (r *NameMatchRule) Name() string {
-	return "name_match"
-}
-
-func (r *NameMatchRule) Match(event *core.Event) bool {
-	return event.Name == r.MatchName
-}
-
 type FieldMatchRule struct {
-	FieldName string
-	Value     string
+	Name  string
+	Value interface{}
 }
 
-func (r *FieldMatchRule) Name() string {
+func (r *FieldMatchRule) Type() string {
 	return "field_match"
 }
 
 func (r *FieldMatchRule) Match(event *core.Event) bool {
-	val, found := event.Data[r.FieldName]
+	val, found := event.Data[r.Name]
 	if !found {
 		return false
 	}
@@ -97,16 +113,16 @@ func (r *FieldMatchRule) Match(event *core.Event) bool {
 }
 
 type NotFieldMatchRule struct {
-	FieldName string
-	Value     string
+	Name  string
+	Value interface{}
 }
 
-func (r *NotFieldMatchRule) Name() string {
+func (r *NotFieldMatchRule) Type() string {
 	return "not_field_match"
 }
 
 func (r *NotFieldMatchRule) Match(event *core.Event) bool {
-	val, found := event.Data[r.FieldName]
+	val, found := event.Data[r.Name]
 	if !found {
 		return true
 	}
@@ -114,27 +130,27 @@ func (r *NotFieldMatchRule) Match(event *core.Event) bool {
 }
 
 type FieldPresentRule struct {
-	FieldName string
+	Name string
 }
 
-func (r *FieldPresentRule) Name() string {
+func (r *FieldPresentRule) Type() string {
 	return "field_present"
 }
 
 func (r *FieldPresentRule) Match(event *core.Event) bool {
-	_, found := event.Data[r.FieldName]
+	_, found := event.Data[r.Name]
 	return found
 }
 
 type NotFieldPresentRule struct {
-	FieldName string
+	Name string
 }
 
-func (r *NotFieldPresentRule) Name() string {
+func (r *NotFieldPresentRule) Type() string {
 	return "not_field_present"
 }
 
 func (r *NotFieldPresentRule) Match(event *core.Event) bool {
-	_, found := event.Data[r.FieldName]
+	_, found := event.Data[r.Name]
 	return !found
 }
