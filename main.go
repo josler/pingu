@@ -12,12 +12,17 @@ import (
 	"github.com/josler/pingu/tailer"
 )
 
-var filepathVar string
+var logFilepathVar string
+var configFilepathVar string
 var limitVar int
 
 func main() {
 	flag.Parse()
-	file, _ := os.Open("resources/pingu-config.json")
+	file, err := os.Open(configFilepathVar)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 	c, err := core.ParseConfig(file)
 	if err != nil {
 		fmt.Println(err)
@@ -25,9 +30,9 @@ func main() {
 	}
 
 	var reader io.Reader
-	if filepathVar != "" {
-		fmt.Printf("Reading: %s\n\n", filepathVar)
-		file, err := os.Open(filepathVar)
+	if logFilepathVar != "" {
+		fmt.Printf("Reading: %s\n\n", logFilepathVar)
+		file, err := os.Open(logFilepathVar)
 		defer file.Close()
 		if err != nil {
 			log.Fatal(err)
@@ -54,6 +59,7 @@ func main() {
 }
 
 func init() {
-	flag.StringVar(&filepathVar, "f", "", "filepath to parse")
+	flag.StringVar(&logFilepathVar, "f", "", "filepath to logs to parse")
+	flag.StringVar(&configFilepathVar, "c", "resources/pingu-config.json", "filepath to config")
 	flag.IntVar(&limitVar, "l", -1, "number of items to limit report to")
 }

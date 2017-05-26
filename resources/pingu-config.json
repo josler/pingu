@@ -4,10 +4,10 @@
         "rules": [
             { "type": "all_match" },
             { "type": "field_match", "name": "status", "value": 200 },
-            { "type": "field_match", "name": "path", "value": "/mypath" }
+            { "type": "field_match", "name": "path", "value": "/events" }
         ]
     },
-    "group": "appname",
+    "group": "app_id_code",
     "calculation": {
         "type": "mean",
         "name": "duration"
