@@ -56,6 +56,7 @@ func main() {
 
 	grouping.Start()
 	fmt.Println(grouping.Report(limitVar))
+	fmt.Println(grouping.ReportBuckets(limitVar))
 }
 
 func init() {

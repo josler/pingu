@@ -2,7 +2,6 @@ package processor
 
 import (
 	"fmt"
-	"sort"
 	"time"
 
 	"github.com/josler/pingu/core"
@@ -12,21 +11,33 @@ const WAIT_DURATION time.Duration = 1 * time.Second
 
 type Grouping struct {
 	*pipelineStage
-	key         string
-	builder     func() Calculation
-	calcGroups  map[interface{}]Calculation
-	eventGroups map[interface{}][]*core.Event
+	key             string
+	timestampKey    string
+	windowingPeriod time.Duration
+	builder         func() Calculation
+	buckets         map[time.Time]*BucketCalculation
 }
 
 func NewGrouping(key string, builder func() Calculation, in <-chan *core.Event) *Grouping {
 	g := Grouping{
-		pipelineStage: &pipelineStage{in: in, out: make(chan *core.Event)},
-		key:           key,
-		builder:       builder,
-		calcGroups:    map[interface{}]Calculation{},
-		eventGroups:   map[interface{}][]*core.Event{},
+		pipelineStage:   &pipelineStage{in: in, out: make(chan *core.Event)},
+		key:             key,
+		timestampKey:    "timestamp",
+		windowingPeriod: 15 * time.Second,
+		builder:         builder,
+		buckets:         map[time.Time]*BucketCalculation{},
 	}
 	return &g
+}
+
+// SetTimestampKey allows the overriding of the default "timestamp"
+func (g *Grouping) SetTimestampKey(timestampKey string) {
+	g.timestampKey = timestampKey
+}
+
+// SetWindowingPeriod allows the overriding of the default 15 seconds.
+func (g *Grouping) SetWindowingPeriod(windowingPeriod time.Duration) {
+	g.windowingPeriod = windowingPeriod
 }
 
 func (g *Grouping) Start() {
@@ -42,74 +53,58 @@ func (g *Grouping) Start() {
 		}
 	}
 }
+
 func (g *Grouping) process(event *core.Event) {
-	groupVal, found := event.Data[g.key]
+	groupKeyVal, found := event.Data[g.key]
 	if !found {
 		return
 	}
-	calc, found := g.calcGroups[groupVal]
+
+	// parse time
+	timeVal, found := event.Data[g.timestampKey]
 	if !found {
-		calc = g.builder()
-		g.calcGroups[groupVal] = calc
-		g.eventGroups[groupVal] = []*core.Event{}
+		return
 	}
-	calc.Calculate(event)
-	g.eventGroups[groupVal] = append(g.eventGroups[groupVal], event)
-}
-
-type Pair struct {
-	Key   interface{}
-	Value Calculation
-}
-
-type PairList []Pair
-
-func (p PairList) Len() int           { return len(p) }
-func (p PairList) Less(i, j int) bool { return p[i].Value.LessThan(p[j].Value) }
-func (p PairList) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
-
-func (g *Grouping) sorted() PairList {
-	pl := make(PairList, len(g.calcGroups))
-	i := 0
-	for k, v := range g.calcGroups {
-		pl[i] = Pair{k, v}
-		i++
+	t, err := time.Parse("2006-01-02T15:04:05.999Z", timeVal.(string))
+	if err != nil {
+		fmt.Println(err)
+		fmt.Println(timeVal)
+		return
 	}
-	sort.Sort(sort.Reverse(pl))
-	return pl
-}
 
-func (g *Grouping) topN(n int) PairList {
-	sorted := g.sorted()
-	if len(sorted) <= n {
-		return sorted
+	// find bucket
+	truncated := t.Truncate(g.windowingPeriod)
+	bucket, found := g.buckets[truncated]
+	if !found {
+		bucket = NewBucketCalculation(truncated, g.builder)
+		g.buckets[truncated] = bucket
 	}
-	return g.sorted()[:n]
+
+	bucket.add(groupKeyVal, event)
 }
 
 func (g *Grouping) Report(n int) string {
-	str := fmt.Sprintf("Grouping by %v:\n\n", g.key)
+	str := fmt.Sprintf("Grouping by %v\n", g.key)
+	str += fmt.Sprintf("Gathered over %d buckets, with windowing period: %v\n", len(g.buckets), g.windowingPeriod)
 
-	if n < 0 {
-		n = len(g.calcGroups)
-	}
-	for _, pair := range g.topN(n) {
-		str += fmt.Sprintf("%v: %v\n", pair.Key, pair.Value)
+	// Merge buckets and report
+	overallBucket := NewBucketCalculation(time.Now(), g.builder)
+
+	for _, bucket := range g.buckets {
+		overallBucket.Merge(bucket)
 	}
 
+	str += overallBucket.Report(n)
 	return str
 }
 
-func (g *Grouping) String() string {
-	str := fmt.Sprintf("Grouping by %v:\n\n", g.key)
+func (g *Grouping) ReportBuckets(n int) string {
+	str := fmt.Sprintf("Grouping by %v\n", g.key)
+	str += fmt.Sprintf("%d buckets, with windowing period: %v\n", len(g.buckets), g.windowingPeriod)
 
-	for _, pair := range g.sorted() {
-		str += fmt.Sprintf("%v: %v\n", pair.Key, pair.Value)
+	for _, bucket := range g.buckets {
+		str += bucket.Report(n)
 	}
 
-	// str := fmt.Sprintf("Grouping by %v:\n\n", g.key)
-	// for k, v := range g.eventGroups {
-	// 	str += fmt.Sprintf("%v: %v\n", k, v)
-	// }
 	return str
 }

@@ -23,9 +23,8 @@ func (p *Parser) Parse(reader io.Reader) {
 
 func (p *Parser) parse(reader io.Reader) {
 	scanner := bufio.NewScanner(reader)
-	if scanner.Err() != nil {
-		panic(scanner.Err())
-	}
+	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
+
 	for scanner.Scan() {
 		e := &core.Event{Name: "requests"}
 		err := json.Unmarshal(scanner.Bytes(), &e.Data)
@@ -33,6 +32,9 @@ func (p *Parser) parse(reader io.Reader) {
 			fmt.Println(err)
 		}
 		p.out <- e
+	}
+	if scanner.Err() != nil {
+		panic(scanner.Err())
 	}
 }
 

@@ -9,6 +9,8 @@ import (
 type Calculation interface {
 	Calculate(event *core.Event)
 	LessThan(other Calculation) bool
+	Merge(other Calculation)
+	Copy() Calculation
 }
 
 // ParseCalculation returns a builder function that will build Calculations
@@ -34,6 +36,14 @@ func (c *CountCalculation) Calculate(event *core.Event) {
 
 func (c *CountCalculation) LessThan(other Calculation) bool {
 	return c.value < other.(*CountCalculation).value
+}
+
+func (c *CountCalculation) Merge(other Calculation) {
+	c.value += other.(*CountCalculation).value
+}
+
+func (c *CountCalculation) Copy() Calculation {
+	return &CountCalculation{value: c.value}
 }
 
 func (c *CountCalculation) String() string {
@@ -71,6 +81,14 @@ func (c *SumCalculation) LessThan(other Calculation) bool {
 	return c.value < other.(*SumCalculation).value
 }
 
+func (c *SumCalculation) Merge(other Calculation) {
+	c.value += other.(*SumCalculation).value
+}
+
+func (c *SumCalculation) Copy() Calculation {
+	return &SumCalculation{key: c.key, value: c.value}
+}
+
 func (c *SumCalculation) String() string {
 	return fmt.Sprintf("%v", c.value)
 }
@@ -106,6 +124,15 @@ func (c *MeanCalculation) Calculate(event *core.Event) {
 
 func (c *MeanCalculation) LessThan(other Calculation) bool {
 	return (c.value / c.samples) < (other.(*MeanCalculation).value / other.(*MeanCalculation).samples)
+}
+
+func (c *MeanCalculation) Copy() Calculation {
+	return &MeanCalculation{key: c.key, samples: c.samples, value: c.value}
+}
+
+func (c *MeanCalculation) Merge(other Calculation) {
+	c.samples += other.(*MeanCalculation).samples
+	c.value += other.(*MeanCalculation).value
 }
 
 func (c *MeanCalculation) String() string {

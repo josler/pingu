@@ -36,15 +36,15 @@ func ParseRules(jsonRule *core.JsonRule) Rule {
 }
 
 func NewAndRule(rules ...Rule) *AndRule {
-	and := AndRule{rules: map[string]Rule{}}
+	and := AndRule{rules: []Rule{}}
 	for _, rule := range rules {
-		and.rules[rule.Type()] = rule
+		and.rules = append(and.rules, rule)
 	}
 	return &and
 }
 
 type AndRule struct {
-	rules map[string]Rule
+	rules []Rule
 }
 
 func (and *AndRule) Type() string {
@@ -61,15 +61,15 @@ func (and *AndRule) Match(event *core.Event) bool {
 }
 
 func NewOrRule(rules ...Rule) *OrRule {
-	or := OrRule{rules: map[string]Rule{}}
+	or := OrRule{rules: []Rule{}}
 	for _, rule := range rules {
-		or.rules[rule.Type()] = rule
+		or.rules = append(or.rules, rule)
 	}
 	return &or
 }
 
 type OrRule struct {
-	rules map[string]Rule
+	rules []Rule
 }
 
 func (or *OrRule) Type() string {
