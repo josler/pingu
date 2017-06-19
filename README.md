@@ -2,6 +2,7 @@
 
 Show me the mean durations of successful requests to /events broken down by app id
 
+
 ### A?
 
 Given some ruleset:
