@@ -31,32 +31,28 @@ func main() {
 
 	var reader io.Reader
 	if logFilepathVar != "" {
-		fmt.Printf("Reading: %s\n\n", logFilepathVar)
-		file, err := os.Open(logFilepathVar)
-		defer file.Close()
-		if err != nil {
-			log.Fatal(err)
-		}
+		file = getFileAtPos(0, logFilepathVar)
 		reader = file
+		defer file.Close()
 	} else {
 		reader = os.Stdin
 	}
-
 	p := tailer.Parser{}
 	p.Parse(reader)
 
-	rule := processor.ParseRules(c.Rules())
-	f := processor.ParseCalculation(c.Calculation())
-	filter := processor.NewFilter(rule, p.Out())
-	grouping := processor.NewGrouping(
-		c.GroupBy(),
-		f,
-		filter.Out(),
-	)
+	query := processor.NewQuery(&p, limitVar, c)
+	query.Start()
+}
 
-	grouping.Start()
-	fmt.Println(grouping.Report(limitVar))
-	fmt.Println(grouping.ReportBuckets(limitVar))
+func getFileAtPos(position int64, filename string) *os.File {
+	fmt.Printf("Reading: %s\n\n", filename)
+	file, err := os.Open(filename)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+	file.Seek(position, 0)
+	return file
 }
 
 func init() {

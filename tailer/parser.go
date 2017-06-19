@@ -11,7 +11,8 @@ import (
 )
 
 type Parser struct {
-	out chan *core.Event
+	out   chan *core.Event
+	endAt int64
 }
 
 func (p *Parser) Parse(reader io.Reader) {
@@ -21,20 +22,30 @@ func (p *Parser) Parse(reader io.Reader) {
 	go p.parse(reader)
 }
 
-func (p *Parser) parse(reader io.Reader) {
-	scanner := bufio.NewScanner(reader)
-	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
+func (p *Parser) ParseTo(reader io.Reader, endAt int64) {
+	p.endAt = endAt
+	p.Parse(reader)
+}
 
-	for scanner.Scan() {
-		e := &core.Event{Name: "requests"}
-		err := json.Unmarshal(scanner.Bytes(), &e.Data)
+func (p *Parser) parse(reader io.Reader) {
+	buf := bufio.NewReader(reader)
+	var data []byte
+	var err error
+	for {
+		data, err = buf.ReadBytes('\n')
 		if err != nil {
-			fmt.Println(err)
+			if err != io.EOF {
+				fmt.Println(err)
+			}
+			break
+		}
+		e := &core.Event{Name: "requests"}
+		err := json.Unmarshal(data, &e.Data)
+		if err != nil {
+			// fmt.Println(err)
+			continue
 		}
 		p.out <- e
-	}
-	if scanner.Err() != nil {
-		panic(scanner.Err())
 	}
 }
 
